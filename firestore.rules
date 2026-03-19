@@ -1,0 +1,166 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: /users/{userId}
+// Document ID: userId (string)
+// Fields:
+//   - uid: string (required) - Unique user ID
+//   - email: string (required, email format) - User's email
+//   - displayName: string (optional) - User's display name
+//   - isVerified: boolean (optional) - Whether the user has completed OTP verification
+//   - role: string (required, enum: ["unverified", "verified", "admin"]) - User's role
+//   - startingCapital: number (optional) - User's starting capital
+//   - currentCapital: number (optional) - User's current capital
+//   - disciplineScore: number (optional) - User's daily discipline score
+//   - totalScore: number (optional) - User's total discipline score
+//   - streak: number (optional) - User's consecutive disciplined days
+//   - level: string (optional, enum: ["Beginner", "Intermediate", "Advanced"]) - User's level
+//   - badges: list (optional) - User's earned badges
+//   - isPro: boolean (optional) - Whether the user has a pro subscription
+//   - photoURL: string (optional) - User's profile picture (base64)
+//   - createdAt: timestamp (optional) - Document creation time
+//
+// Collection: /users/{userId}/trades/{tradeId}
+// Document ID: tradeId (string)
+// Fields:
+//   - id: string (optional) - Unique trade ID
+//   - userId: string (required) - The user who made the trade
+//   - assetType: string (required, enum: ["Currency", "Crypto", "Commodity"]) - Type of asset
+//   - pair: string (optional) - Trading pair/symbol
+//   - currentCapital: number (required) - Capital at time of trade
+//   - tradeAmount: number (required) - Amount invested
+//   - percentage: number (required) - Return percentage
+//   - result: string (required, enum: ["Win", "Loss"]) - Trade result
+//   - emotion: string (required, enum: ["Calm", "Fear", "Greed", "Revenge", "Confident", "FOMO"]) - User's emotion
+//   - ruleFollowed: boolean (required) - Whether the user followed their rules
+//   - duration: string (required, enum: ["1m", "5m", "15m", "30m", "1h", "4h", "Daily"]) - Trade duration
+//   - capitalChange: number (required) - Change in capital
+//   - timestamp: timestamp (required) - Trade timestamp
+//
+// Collection: /challenges/{challengeId}
+// Document ID: challengeId (string)
+// Fields:
+//   - id: string (optional) - Unique challenge ID
+//   - title: string (required) - Challenge title
+//   - description: string (required) - Challenge description
+//   - reward: number (required) - Score reward
+//   - type: string (required) - Challenge type
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "anshv8707@gmail.com");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['unverified', 'verified', 'admin'] &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('currency' in data) || data.currency in ['USD', 'INR']) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('startingCapital' in data) || data.startingCapital is number) &&
+             (!('currentCapital' in data) || data.currentCapital is number) &&
+             (!('disciplineScore' in data) || data.disciplineScore is number) &&
+             (!('totalScore' in data) || data.totalScore is number) &&
+             (!('streak' in data) || data.streak is number) &&
+             (!('isPro' in data) || data.isPro is bool) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('level' in data) || data.level in ['Beginner', 'Intermediate', 'Advanced']);
+    }
+
+    function isValidTrade(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.assetType in ['Currency', 'Crypto', 'Commodity'] &&
+             (!('pair' in data) || (data.pair is string && data.pair.size() < 50)) &&
+             data.currentCapital is number &&
+             data.tradeAmount is number &&
+             data.percentage is number &&
+             data.result in ['Win', 'Loss'] &&
+             data.emotion in ['Calm', 'Fear', 'Greed', 'Revenge', 'Confident', 'FOMO'] &&
+             data.ruleFollowed is bool &&
+             data.duration in ['1m', '5m', '15m', '30m', '1h', '4h', 'Daily'] &&
+             data.capitalChange is number &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Match Blocks
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own profile. Admins can read all.
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile.
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role in ['unverified', 'verified'] || isAdmin());
+      
+      // Users can update their own profile.
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                    (request.resource.data.role == resource.data.role || isAdmin());
+      
+      // Only admins can delete users.
+      allow delete: if isAdmin();
+
+      match /trades/{tradeId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidTrade(request.resource.data);
+        allow update: if isOwner(userId) && isValidTrade(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /users_public/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

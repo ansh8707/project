@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user information, scores, streaks, and levels.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "isVerified": { "type": "boolean", "description": "Whether the user has completed OTP verification" },
+        "role": { "type": "string", "enum": ["unverified", "verified", "admin"] },
+        "startingCapital": { "type": "number" },
+        "currentCapital": { "type": "number" },
+        "disciplineScore": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "streak": { "type": "number" },
+        "level": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "isPro": { "type": "boolean" },
+        "photoURL": { "type": "string", "description": "User's profile picture (base64)" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Trade": {
+      "title": "Trade Log",
+      "description": "Stores individual trade details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "result": { "type": "string", "enum": ["Win", "Loss"] },
+        "emotion": { "type": "string", "enum": ["Calm", "Fear", "Greed", "Revenge", "Confident", "FOMO"] },
+        "ruleFollowed": { "type": "boolean" },
+        "duration": { "type": "string", "enum": ["1m", "5m", "15m"] },
+        "capitalChange": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "result", "emotion", "ruleFollowed", "duration", "timestamp"]
+    },
+    "Challenge": {
+      "title": "Daily Challenge",
+      "description": "Stores daily challenges for users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "reward": { "type": "number" },
+        "type": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/users/{userId}/trades/{tradeId}": {
+      "schema": "Trade",
+      "description": "User's trade logs"
+    },
+    "/challenges/{challengeId}": {
+      "schema": "Challenge",
+      "description": "Global daily challenges"
+    },
+    "/broadcasts/{broadcastId}": {
+      "schema": {
+        "title": "Broadcast Message",
+        "description": "Global announcements for all users.",
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "active": { "type": "boolean" }
+        },
+        "required": ["message", "timestamp", "active"]
+      },
+      "description": "Global announcements"
+    }
+  }
+}
